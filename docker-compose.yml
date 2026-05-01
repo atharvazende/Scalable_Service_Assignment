@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: eci-postgres
+    environment:
+      POSTGRES_USER: eci_user
+      POSTGRES_PASSWORD: eci_password
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eci_user -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: eci-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: eci-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: eci-grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  catalog_service:
+    build: ./catalog_service
+    container_name: eci-catalog-service
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://eci_user:eci_password@postgres:5432/catalog_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  inventory_service:
+    build: ./inventory_service
+    container_name: eci-inventory-service
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://eci_user:eci_password@postgres:5432/inventory_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  order_service:
+    build: ./order_service
+    container_name: eci-order-service
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://eci_user:eci_password@postgres:5432/order_db
+      - CATALOG_SERVICE_URL=http://catalog_service:8001
+      - INVENTORY_SERVICE_URL=http://inventory_service:8002
+      - PAYMENT_SERVICE_URL=http://payment_service:8004
+      - SHIPPING_SERVICE_URL=http://shipping_service:8005
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  payment_service:
+    build: ./payment_service
+    container_name: eci-payment-service
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql://eci_user:eci_password@postgres:5432/payment_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  shipping_service:
+    build: ./shipping_service
+    container_name: eci-shipping-service
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql://eci_user:eci_password@postgres:5432/shipping_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification_service:
+    build: ./notification_service
+    container_name: eci-notification-service
+    ports:
+      - "8006:8006"
+    environment:
+      - DATABASE_URL=postgresql://eci_user:eci_password@postgres:5432/notification_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

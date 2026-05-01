@@ -1,0 +1,407 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog-service
+  template:
+    metadata:
+      labels:
+        app: catalog-service
+    spec:
+      containers:
+      - name: catalog-service
+        image: eci-catalog-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8001
+        env:
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: eci-config
+              key: POSTGRES_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: eci-secret
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          value: postgresql://$(DB_USER):$(DB_PASS)@postgres:5432/catalog_db
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-service
+spec:
+  type: NodePort
+  selector:
+    app: catalog-service
+  ports:
+  - port: 8001
+    targetPort: 8001
+    nodePort: 30001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory-service
+  template:
+    metadata:
+      labels:
+        app: inventory-service
+    spec:
+      containers:
+      - name: inventory-service
+        image: eci-inventory-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8002
+        env:
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: eci-config
+              key: POSTGRES_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: eci-secret
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          value: postgresql://$(DB_USER):$(DB_PASS)@postgres:5432/inventory_db
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service
+spec:
+  type: NodePort
+  selector:
+    app: inventory-service
+  ports:
+  - port: 8002
+    targetPort: 8002
+    nodePort: 30002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+      - name: order-service
+        image: eci-order-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8003
+        env:
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: eci-config
+              key: POSTGRES_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: eci-secret
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          value: postgresql://$(DB_USER):$(DB_PASS)@postgres:5432/order_db
+        - name: CATALOG_SERVICE_URL
+          value: http://catalog-service:8001
+        - name: INVENTORY_SERVICE_URL
+          value: http://inventory-service:8002
+        - name: PAYMENT_SERVICE_URL
+          value: http://payment-service:8004
+        - name: SHIPPING_SERVICE_URL
+          value: http://shipping-service:8005
+        - name: RABBITMQ_URL
+          value: amqp://guest:guest@rabbitmq:5672/
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+spec:
+  type: NodePort
+  selector:
+    app: order-service
+  ports:
+  - port: 8003
+    targetPort: 8003
+    nodePort: 30003
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+      - name: payment-service
+        image: eci-payment-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8004
+        env:
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: eci-config
+              key: POSTGRES_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: eci-secret
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          value: postgresql://$(DB_USER):$(DB_PASS)@postgres:5432/payment_db
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8004
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+spec:
+  type: NodePort
+  selector:
+    app: payment-service
+  ports:
+  - port: 8004
+    targetPort: 8004
+    nodePort: 30004
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shipping-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shipping-service
+  template:
+    metadata:
+      labels:
+        app: shipping-service
+    spec:
+      containers:
+      - name: shipping-service
+        image: eci-shipping-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8005
+        env:
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: eci-config
+              key: POSTGRES_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: eci-secret
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          value: postgresql://$(DB_USER):$(DB_PASS)@postgres:5432/shipping_db
+        - name: RABBITMQ_URL
+          value: amqp://guest:guest@rabbitmq:5672/
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8005
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8005
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shipping-service
+spec:
+  type: NodePort
+  selector:
+    app: shipping-service
+  ports:
+  - port: 8005
+    targetPort: 8005
+    nodePort: 30005
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-service
+        image: eci-notification-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8006
+        env:
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: eci-config
+              key: POSTGRES_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: eci-secret
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          value: postgresql://$(DB_USER):$(DB_PASS)@postgres:5432/notification_db
+        - name: RABBITMQ_URL
+          value: amqp://guest:guest@rabbitmq:5672/
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8006
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8006
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+spec:
+  selector:
+    app: notification-service
+  ports:
+  - port: 8006
+    targetPort: 8006
